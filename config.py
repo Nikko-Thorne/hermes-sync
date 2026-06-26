@@ -93,7 +93,7 @@ def load_config() -> SyncConfig:
         except Exception:
             pass
 
-    env_repo = os.getenv("HERMES_SWARM_REPO", "")
+    env_repo = os.getenv("HERMES_SYNC_REPO", "")
     if env_repo:
         cfg.repo_url = env_repo
 
