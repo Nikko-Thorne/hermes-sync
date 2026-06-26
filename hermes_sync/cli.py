@@ -53,8 +53,9 @@ def cmd_start(args):
 
 def cmd_status(args):
     """Show sync status."""
+    from hermes_sync import __version__
     config = load_config()
-    print(f"hermes-sync v0.2.0")
+    print(f"hermes-sync v{__version__}")
     print(f"  Enabled:     {config.enabled}")
     print(f"  Backend:     {config.backend}")
     print(f"  Repo:        {config.repo_url or '(not set)'}")

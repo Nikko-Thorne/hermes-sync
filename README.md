@@ -104,11 +104,11 @@ before syncing. Each device gets its own age keypair at
 # Linux:   apt install age
 # Windows: choco install age
 
-# Keypair is auto-generated on first run.
-# Share the public key between your devices:
-hermes-sync age-pubkey   # prints your public key
+# Keypair is auto-generated on first run at ~/.hermes/sync/age.key
+# To get your public key:
+age-keygen -y ~/.hermes/sync/age.key
 
-# On another device, add the first device's key:
+# On another device, generate a new keypair:
 age-keygen -o ~/.hermes/sync/age.key
 ```
 

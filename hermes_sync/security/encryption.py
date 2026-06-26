@@ -249,7 +249,7 @@ def is_age_available() -> bool:
     """Check if the age CLI is installed."""
     try:
         result = subprocess.run(
-            ["age", "-version"],
+            ["age", "--version"],
             capture_output=True, text=True, timeout=10,
         )
         return result.returncode == 0

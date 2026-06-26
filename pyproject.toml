@@ -32,4 +32,4 @@ include = ["hermes_sync*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
-addopts = "-n 0 -v"
+addopts = "-v"

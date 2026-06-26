@@ -1,6 +1,6 @@
 # Hermes Sync — Installation Guide
 
-Sync your Hermes skills, memory, and cron across all your devices.
+Sync your Hermes skills, memory, config, and profiles across all your devices.
 Takes 2 minutes. Zero servers. Just GitHub.
 
 ---
@@ -10,7 +10,7 @@ Takes 2 minutes. Zero servers. Just GitHub.
 - A GitHub account
 - A [GitHub Personal Access Token](https://github.com/settings/tokens)
   with `repo` scope
-- Hermes installed on each device
+- Python 3.11+
 
 ---
 
@@ -31,29 +31,20 @@ Go to https://github.com/settings/tokens → Generate new token (classic)
 ## Install on EVERY device
 
 ```bash
-# 1. Install the plugin
-git clone https://github.com/Nikko-Thorne/hermes-sync \
-  ~/.hermes/plugins/hermes-sync/
+# 1. Install hermes-sync
+pip install hermes-sync
+# OR: pip install git+https://github.com/Nikko-Thorne/hermes-sync.git
 
-# 2. Create config
-cat > ~/.hermes/plugins/hermes-sync/config.yaml << 'EOF'
-backend: github
-repo_url: https://github.com/YOU/hermes-sync-state.git
-sync_interval: 60
-sync_skills: true
-sync_memories: true
-sync_cron: false
-token: YOUR_GITHUB_TOKEN_HERE
-EOF
+# 2. Run the setup wizard
+hermes-sync setup
 
-# 3. Replace YOUR_GITHUB_TOKEN_HERE with your actual token
-#    OR set it as an env var (safer):
-#    export GH_TOKEN=***
+# 3. Follow the prompts to enter:
+#    - GitHub repo URL (https://github.com/YOU/hermes-sync-state.git)
+#    - GitHub token (or set GH_TOKEN env var)
+#    - What to sync (skills, memories, cron, config, profiles)
 
-# 4. Enable the plugin in Hermes
-hermes config set plugins.enabled '[hermes-sync]'
-
-# 5. Restart Hermes — plugin auto-starts on next session
+# 4. Start syncing
+hermes-sync start
 ```
 
 ---
@@ -61,14 +52,18 @@ hermes config set plugins.enabled '[hermes-sync]'
 ## Verify it's working
 
 ```bash
-# Check plugin status
-hermes plugins list | grep sync
+# Check sync status
+hermes-sync status
 
-# Should show: hermes-sync | enabled | 0.1.0
+# Should show:
+#   Enabled:  True
+#   Backend:  github
+#   Repo:     https://github.com/YOU/hermes-sync-state.git
+#   ...
 
-# Check sync repo
-ls ~/.hermes/sync-repo/
-# Should show: skills/ memories/
+# Check the sync repo
+ls ~/.hermes/sync/repo/
+# Should show: skills/ memories/ (and other enabled categories)
 ```
 
 ---
@@ -82,11 +77,11 @@ You create a skill
     ↓
 ~/.hermes/skills/
     ↓ (watcher detects change)
-sync-repo/skills/
+~/.hermes/sync/repo/skills/
     ↓ (auto-commit + push)
                           →     hermes-sync-state (private)
                                                         ↓ (auto-pull every 60s)
-                                                   sync-repo/skills/
+                                                   ~/.hermes/sync/repo/skills/
                                                         ↓ (copied to ~/.hermes/)
                                                    ~/.hermes/skills/
                                                         ↓
@@ -103,39 +98,124 @@ sync-repo/skills/
 
 ---
 
-## Troubleshooting
+## Running as a service
 
-**Plugin shows "not enabled"**
+### systemd (Linux)
+
 ```bash
-hermes config set plugins.enabled '[hermes-sync]'
+# Create service file
+cat > ~/.config/systemd/user/hermes-sync.service << 'EOF'
+[Unit]
+Description=Hermes Sync
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/env hermes-sync start
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target
+EOF
+
+# Enable and start
+systemctl --user daemon-reload
+systemctl --user enable --now hermes-sync
+
+# Check status
+systemctl --user status hermes-sync
 ```
-Then restart Hermes.
 
-**"Clone failed" in logs**
-Check your token works:
-```bash
-GH_TOKEN=*** git clone https://github.com/YOU/hermes-sync-state.git /tmp/test-clone
-```
+### launchd (macOS)
 
-**Nothing syncing?**
-Force a manual sync:
 ```bash
-cd ~/.hermes/plugins/hermes-sync
-python3 -c "
-import sys; sys.path.insert(0, '.')
-from sync import HermesSync
-s = HermesSync()
-s.start()
-p_ok, p_msg, push_ok, push_msg = s.sync_now()
-print(f'Pull: {p_msg}')
-print(f'Push: {push_msg}')
-s.stop()
-"
+# Create plist file
+cat > ~/Library/LaunchAgents/com.hermes.sync.plist << 'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.hermes.sync</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/local/bin/hermes-sync</string>
+        <string>start</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+</dict>
+</plist>
+EOF
+
+# Load and start
+launchctl load ~/Library/LaunchAgents/com.hermes.sync.plist
+
+# Check status
+launchctl list | grep hermes
 ```
 
 ---
 
-## Repos
+## Troubleshooting
 
-- **Plugin:** https://github.com/Nikko-Thorne/hermes-sync
-- **Sync state:** your private `hermes-sync-state` repo
+**"Not configured" error**
+```bash
+# Run setup first
+hermes-sync setup
+```
+
+**"Clone failed" in logs**
+
+Check your token works:
+```bash
+export GH_TOKEN=ghp_your_token_here
+git clone https://github.com/YOU/hermes-sync-state.git /tmp/test-clone
+```
+
+If that fails, regenerate your token with `repo` scope.
+
+**Nothing syncing?**
+
+Force a manual sync:
+```bash
+hermes-sync push
+hermes-sync pull
+```
+
+Check logs:
+```bash
+hermes-sync start
+# Watch for errors in output
+```
+
+**Merge conflicts?**
+
+Hermes Sync auto-resolves conflicts by preferring local changes ("ours" strategy).
+The sync repo is just a cache — your local `~/.hermes/` is always the source of truth.
+
+---
+
+## Uninstall
+
+```bash
+# Stop the daemon
+# systemd: systemctl --user stop hermes-sync
+# launchd: launchctl unload ~/Library/LaunchAgents/com.hermes.sync.plist
+
+# Remove hermes-sync
+pip uninstall hermes-sync
+
+# Optionally remove sync data
+rm -rf ~/.hermes/sync/
+```
+
+---
+
+## Links
+
+- **GitHub:** https://github.com/Nikko-Thorne/hermes-sync
+- **Issues:** https://github.com/Nikko-Thorne/hermes-sync/issues

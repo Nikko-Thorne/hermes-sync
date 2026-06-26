@@ -1,7 +1,7 @@
 # Hermes Sync Configuration
 # https://github.com/Nikko-Thorne/hermes-sync
 #
-# Copy this file to ~/.hermes/plugins/hermes-sync/config.yaml
+# Copy this file to ~/.hermes/sync/config.yaml
 # and fill in your repo details.
 
 # Backend: "github"
@@ -9,7 +9,7 @@ backend: github
 
 # Your private GitHub repo for sync state
 # HTTPS: https://github.com/you/hermes-sync-state.git
-# SSH:   git@github.com:you/hermes-sync-state.git
+# SSH:   [EMAIL]:you/hermes-sync-state.git
 repo_url: ""
 
 # Sync interval in seconds (default: 60)
@@ -19,12 +19,15 @@ sync_interval: 60
 auto_resolve_conflicts: true
 
 # Platforms to sync to (auto-detected if empty)
-# platforms: [linux, macos]
+# Leave empty or specify: [linux, macos, windows]
+platforms: []
 
 # What to sync (default: skills + memories)
 sync_skills: true
 sync_memories: true
 sync_cron: false
+sync_config: false    # Sync config.yaml (requires age encryption)
+sync_profiles: false  # Sync ~/.hermes/profiles/
 
 # GitHub Personal Access Token (NOT recommended — use GH_TOKEN env var instead)
 # token: ""
