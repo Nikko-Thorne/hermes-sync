@@ -39,6 +39,7 @@ class HermesSync:
         self.backend: Optional[GitBackend] = None
         self._running = False
         self._lock = threading.Lock()
+        self._git_lock = threading.Lock()  # serializes git push/pull across threads
         self._sync_thread: Optional[threading.Thread] = None
         self._watch_thread: Optional[threading.Thread] = None
         self._watcher = None  # InotifyWatcher or PollingWatcher
@@ -134,13 +135,19 @@ class HermesSync:
         if not self.backend:
             return False, "No backend", False, "No backend"
 
-        pull_ok, pull_msg = self.backend.pull()
+        from datetime import datetime, timezone
+
+        with self._git_lock:
+            pull_ok, pull_msg = self.backend.pull()
         self.pull_count += 1
+        self.last_pull = datetime.now(timezone.utc).isoformat()
         if pull_ok:
             self._apply_pulled_files()
 
-        push_ok, push_msg = self.backend.push()
+        with self._git_lock:
+            push_ok, push_msg = self.backend.push()
         self.push_count += 1
+        self.last_push = datetime.now(timezone.utc).isoformat()
 
         return pull_ok, pull_msg, push_ok, push_msg
 
@@ -154,8 +161,12 @@ class HermesSync:
                     break
 
                 if self.backend:
-                    success, message = self.backend.pull()
+                    from datetime import datetime, timezone
+
+                    with self._git_lock:
+                        success, message = self.backend.pull()
                     self.pull_count += 1
+                    self.last_pull = datetime.now(timezone.utc).isoformat()
                     if success:
                         self._apply_pulled_files()
                         if "Already up to date" not in message:
@@ -193,8 +204,9 @@ class HermesSync:
         if self.config.sync_profiles:
             sync_pairs.append((hermes_home / "profiles", repo_path / "profiles"))
 
-        # Collect files to copy and check for sensitive files
+        # Collect files, scan for secrets, skip blocked/sensitive files individually
         files_to_copy: list[tuple[Path, Path]] = []
+        blocked_files: list[str] = []
         for src, dst in sync_pairs:
             if not src.is_dir():
                 continue
@@ -204,17 +216,35 @@ class HermesSync:
                     rel = item.relative_to(src)
                     files_to_copy.append((item, dst / rel))
 
-        # Enforce .gitignore rules — refuse to sync blocked files
-        blocked = check_sensitive_files([str(f[0]) for f in files_to_copy])
-        if blocked:
+        # Check for sensitive filenames and content — skip individual files, don't abort
+        sensitive_by_name = set(check_sensitive_files([str(f[0]) for f in files_to_copy]))
+        clean_files: list[tuple[Path, Path]] = []
+        for src_file, dst_file in files_to_copy:
+            if str(src_file) in sensitive_by_name:
+                blocked_files.append(src_file.name)
+                continue
+            # Scan file content for secrets/injections/commands
+            try:
+                content = src_file.read_text(encoding="utf-8-sig")
+                result = scan_content(content)
+                if not result.passed:
+                    blocked_files.append(f"{src_file.name} (content: {len(result.secrets)} secrets, {len(result.injections)} injections, {len(result.dangerous_commands)} commands)")
+                    continue
+            except Exception:
+                pass  # unreadable file — skip
+            clean_files.append((src_file, dst_file))
+
+        if blocked_files:
             logger.warning(
-                "Refusing to sync %d sensitive file(s): %s",
-                len(blocked), ", ".join(blocked),
+                "Skipping %d blocked file(s): %s",
+                len(blocked_files), ", ".join(blocked_files[:10]),
             )
-            return
+
+        if not clean_files:
+            return  # nothing safe to sync
 
         # Perform the copy
-        for src_file, dst_file in files_to_copy:
+        for src_file, dst_file in clean_files:
             dst_file.parent.mkdir(parents=True, exist_ok=True)
             if dst_file.exists():
                 try:
@@ -224,10 +254,14 @@ class HermesSync:
                     pass
             shutil.copy2(src_file, dst_file)
 
-        success, message = self.backend.push(
-            self._signed_commit_message()
-        )
+        from datetime import datetime, timezone
+
+        with self._git_lock:
+            success, message = self.backend.push(
+                self._signed_commit_message()
+            )
         self.push_count += 1
+        self.last_push = datetime.now(timezone.utc).isoformat()
         if success and "No changes" not in message:
             logger.info("Push: %s", message)
         elif not success:

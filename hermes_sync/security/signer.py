@@ -13,6 +13,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import os
+import tempfile
 from pathlib import Path
 from typing import Optional, Tuple
 
@@ -102,6 +103,7 @@ def ensure_keypair() -> Tuple[str, str]:
     """Load existing keypair or generate and save a new one.
 
     Returns (private_key_hex, public_key_hex).
+    Private key is written atomically with mode 0600 — no race window.
     """
     existing = load_keypair()
     if existing is not None:
@@ -113,13 +115,40 @@ def ensure_keypair() -> Tuple[str, str]:
     private_path = KEYPAIR_DIR / "sync.key"
     public_path = KEYPAIR_DIR / "sync.pub"
 
-    private_path.write_text(private_hex + "\n")
-    private_path.chmod(0o600)
+    # Write private key atomically with 0600 from the start — no race window
+    _write_private_key_atomic(private_path, private_hex + "\n")
 
     public_path.write_text(public_hex + "\n")
 
     logger.info("Generated new Ed25519 keypair in %s", KEYPAIR_DIR)
     return private_hex, public_hex
+
+
+def _write_private_key_atomic(path: Path, content: str) -> None:
+    """Write content to path atomically with mode 0600.
+
+    Writes to a temp file first, sets permissions, then renames
+    into place — no window where the file exists with wrong perms.
+    On Windows, the mode is best-effort (NTFS ACLs differ from POSIX).
+    """
+    tmp_path = path.with_suffix(path.suffix + ".tmp")
+    try:
+        # Open with restricted permissions from the start (POSIX only)
+        fd = os.open(str(tmp_path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        try:
+            os.write(fd, content.encode("utf-8"))
+        finally:
+            os.close(fd)
+        # Atomic rename
+        tmp_path.replace(path)
+    except Exception:
+        # Fallback on platforms where os.open mode doesn't work (Windows)
+        tmp_path.write_text(content)
+        try:
+            tmp_path.chmod(0o600)
+        except Exception:
+            pass
+        tmp_path.replace(path)
 
 
 def sign_commit_message(message: str, private_key_hex: str) -> str:
@@ -152,6 +181,9 @@ def verify_commit_message(message: str, public_key_hex: str) -> bool:
         return False
 
     sig_hex = sig_line.split("Sync-Signature: ", 1)[1].strip()
+    # Strip trailing empty lines so signed content matches verified content
+    while content_lines and content_lines[-1] == "":
+        content_lines.pop()
     content = "\n".join(content_lines)
 
     return verify_signature(content, sig_hex, public_key_hex)

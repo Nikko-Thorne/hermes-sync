@@ -26,24 +26,15 @@ class GitBackend:
 
     @property
     def auth_url(self) -> str:
-        """Get the authenticated URL for git operations."""
+        """Get the repo URL — token handled via GIT_ASKPASS, never in URL."""
         if self._authenticated_url is not None:
             return self._authenticated_url
 
         url = self.repo_url
-        if self.token and "github.com" in url:
-            # Inject token into HTTPS URL
-            if url.startswith("https://"):
-                url = url.replace(
-                    "https://",
-                    "https://x-access-token:{}@".format(self.token),
-                )
-            elif url.startswith("git@github.com:"):
-                # Convert SSH to HTTPS with token
-                path = url.split("github.com:")[1]
-                url = "https://x-access-token:{}@github.com/{}".format(
-                    self.token, path
-                )
+        # Convert SSH to HTTPS (ASKPASS only works with HTTPS)
+        if url.startswith("git@github.com:"):
+            path = url.split("github.com:")[1]
+            url = "https://github.com/" + path
 
         self._authenticated_url = url
         return url
@@ -61,7 +52,13 @@ class GitBackend:
         env = os.environ.copy()
         # Prevent interactive prompts
         env["GIT_TERMINAL_PROMPT"] = "0"
-        env["GIT_ASKPASS"] = "echo"
+        # Use ASKPASS for token auth — never embeds token in URL (avoids .git/config leak)
+        if self.token:
+            askpass_path = Path(__file__).resolve().parent.parent / "git_askpass.py"
+            env["GIT_ASKPASS"] = str(askpass_path)
+            env["HERMES_SYNC_TOKEN"] = self.token
+        else:
+            env["GIT_ASKPASS"] = "echo"
 
         try:
             result = subprocess.run(

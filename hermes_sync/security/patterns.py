@@ -70,14 +70,21 @@ SECRET_PATTERNS: List[Tuple[str, str, re.Pattern]] = [
 # ---------------------------------------------------------------------------
 
 def shannon_entropy(data: str) -> float:
-    """Calculate Shannon entropy of a string in bits per character."""
+    """Calculate Shannon entropy of a string in bits per character.
+
+    Uses collections.Counter for O(n) single-pass counting instead
+    of O(256n) character-by-character scan.
+    """
     if not data:
         return 0.0
-    entropy = 0.0
-    for x in range(256):
-        p_x = data.count(chr(x)) / len(data)
-        if p_x > 0:
-            entropy -= p_x * math.log2(p_x)
+    import math
+    from collections import Counter
+    counts = Counter(data)
+    n = len(data)
+    entropy = -sum(
+        (count / n) * math.log2(count / n)
+        for count in counts.values()
+    )
     return entropy
 
 
@@ -309,22 +316,22 @@ BLOCKED_DIR_PATTERNS: List[str] = [
 def check_sensitive_files(file_paths: List[str]) -> List[str]:
     """Check file paths against blocked patterns.
 
-    Returns list of blocked file paths that should not be committed.
+    Returns deduplicated list of blocked file paths that should not be committed.
     """
     import fnmatch
-    blocked = []
+    blocked: set[str] = set()
     for fp in file_paths:
         basename = Path(fp).name
         for pattern in BLOCKED_FILE_PATTERNS:
             if fnmatch.fnmatch(basename, pattern):
-                blocked.append(fp)
+                blocked.add(fp)
                 break
         # Also check for blocked directories in path
         for pattern in BLOCKED_DIR_PATTERNS:
             if pattern in fp:
-                blocked.append(fp)
+                blocked.add(fp)
                 break
-    return blocked
+    return list(blocked)
 
 
 def redact_content(content: str) -> str:

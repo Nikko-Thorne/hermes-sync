@@ -59,6 +59,7 @@ try:
     IN_DELETE_SELF = 0x00000400
     IN_MOVE_SELF = 0x00000800
     IN_ONLYDIR = 0x01000000
+    IN_ISDIR = 0x40000000     # event flag: subject is a directory
     IN_NONBLOCK = 0x00004000
     IN_CLOEXEC = 0x02000000
 
@@ -189,7 +190,7 @@ class InotifyWatcher:
                 # Ignore events we don't care about
                 if mask & (IN_CREATE | IN_MOVED_TO):
                     # New directory created — add a watch for it
-                    if mask & IN_ONLYDIR:
+                    if mask & IN_ISDIR:
                         dirpath = self._wd_to_path.get(wd, "")
                         if dirpath and name_len > 0:
                             name = buf[pos - name_len : pos].rstrip(b"\x00").decode("utf-8", errors="replace")
@@ -239,6 +240,8 @@ class PollingWatcher:
         self._running = False
 
     def _poll_loop(self) -> None:
+        # Populate baseline mtimes on first scan without triggering callback
+        self._populate_mtimes()
         while self._running:
             time.sleep(self._interval)
             if not self._running:
@@ -248,6 +251,18 @@ class PollingWatcher:
                     self._on_change()
                 except Exception as e:
                     logger.error("Polling callback error: %s", e)
+
+    def _populate_mtimes(self) -> None:
+        """Seed mtime cache without triggering a push."""
+        for watch_dir in self._paths:
+            if not watch_dir.is_dir():
+                continue
+            for file_path in watch_dir.rglob("*"):
+                if file_path.is_file() and not file_path.name.startswith("."):
+                    try:
+                        self._last_mtimes[str(file_path)] = file_path.stat().st_mtime
+                    except OSError:
+                        pass
 
     def _scan_for_changes(self) -> bool:
         for watch_dir in self._paths:

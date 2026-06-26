@@ -66,6 +66,12 @@ class MergeConflict:
         )
 
 
+def _read_and_normalize(file_path: Path) -> str:
+    """Read a file with UTF-8-SIG encoding and normalize CRLF to LF."""
+    content = file_path.read_text(encoding="utf-8-sig")
+    return content.replace("\r\n", "\n")
+
+
 def detect_conflicts(repo_path: Path) -> List[MergeConflict]:
     """Scan the repo for git merge conflict markers.
 
@@ -82,7 +88,7 @@ def detect_conflicts(repo_path: Path) -> List[MergeConflict]:
             continue
 
         try:
-            content = file_path.read_text()
+            content = _read_and_normalize(file_path)
         except Exception:
             continue
 
@@ -154,7 +160,7 @@ def resolve_conflict(
     Returns True on success.
     """
     try:
-        content = file_path.read_text()
+        content = _read_and_normalize(file_path)
     except Exception:
         return False
 
@@ -180,12 +186,13 @@ def resolve_conflict(
     elif conflict_block + "\n" in content:
         new_content = content.replace(conflict_block + "\n", replacement, 1)
     else:
-        # Fallback: line-by-line resolution of ALL conflicts
+        # Fallback: resolve ONLY the first conflict found (not all conflicts)
         lines = content.split("\n")
         out_lines = []
         in_conflict = False
+        resolved_this = False
         for line in lines:
-            if line.startswith(CONFLICT_START):
+            if line.startswith(CONFLICT_START) and not resolved_this:
                 in_conflict = True
                 if resolution == "ours":
                     out_lines.extend(conflict.ours)
@@ -193,6 +200,7 @@ def resolve_conflict(
                     out_lines.extend(conflict.theirs)
                 else:
                     out_lines.append(resolution)
+                resolved_this = True
                 continue
             elif line == CONFLICT_MID and in_conflict:
                 continue
@@ -229,7 +237,7 @@ def resolve_all_ours(repo_path: Path) -> int:
     for file_path_str, file_conflicts in by_file.items():
         file_path = Path(file_path_str)
         try:
-            content = file_path.read_text()
+            content = _read_and_normalize(file_path)
         except Exception:
             continue
 
