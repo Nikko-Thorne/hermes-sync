@@ -1,0 +1,10 @@
+name: hermes-sync
+version: 0.1.0
+description: "Cross-device sync for Hermes Agent — sync skills, memory, and cron via GitHub. Zero infrastructure."
+author: "Nikko Thorne (@xxnikkoxx)"
+source: user
+kind: standalone
+requires_env: []  # GH_TOKEN is optional; PAT can be in config
+provides_hooks:
+  - on_session_start
+  - on_session_end
