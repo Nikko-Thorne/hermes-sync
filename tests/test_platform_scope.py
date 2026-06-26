@@ -4,12 +4,12 @@ import sys
 import tempfile
 from pathlib import Path
 
-_PLUGIN_DIR = Path(__file__).resolve().parent.parent / "plugin"
-if str(_PLUGIN_DIR) not in sys.path:
-    sys.path.insert(0, str(_PLUGIN_DIR))
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 
 import pytest
-from sync import _skill_matches_platform, _copy_dir_platform_scoped, _parse_yaml_frontmatter
+from hermes_sync.sync import _skill_matches_platform, _copy_dir_platform_scoped, _parse_yaml_frontmatter
 
 
 class TestYamlFrontmatter:

@@ -15,18 +15,13 @@ import time
 from pathlib import Path
 from typing import Optional
 
-# Ensure importing from the same plugin directory works
-_PLUGIN_DIR = Path(__file__).resolve().parent
-if str(_PLUGIN_DIR) not in sys.path:
-    sys.path.insert(0, str(_PLUGIN_DIR))
+from hermes_sync.config import SyncConfig, load_config, get_token, detect_platform
+from hermes_sync.backends.github import GitBackend
+from hermes_sync.security import scan_content, check_sensitive_files, ensure_keypair, sign_commit_message
+from hermes_sync.watcher import create_watcher
+from hermes_sync.merge import detect_conflicts, resolve_all_ours
 
 logger = logging.getLogger(__name__)
-
-from config import SyncConfig, load_config, get_token, detect_platform  # noqa: E402
-from backends.github import GitBackend  # noqa: E402
-from security import scan_content, check_sensitive_files, ensure_keypair, sign_commit_message  # noqa: E402
-from watcher import create_watcher  # noqa: E402
-from merge import detect_conflicts, resolve_all_ours  # noqa: E402
 
 try:
     from hermes_constants import get_hermes_home
@@ -109,6 +104,10 @@ class HermesSync:
             watch_dirs.append(hermes_home / "memories")
         if self.config.sync_cron:
             watch_dirs.append(hermes_home / "cron")
+        if self.config.sync_config:
+            watch_dirs.append(hermes_home)  # watch home for config.yaml changes
+        if self.config.sync_profiles:
+            watch_dirs.append(hermes_home / "profiles")
 
         self._watcher = create_watcher(watch_dirs, self._sync_local_changes)
         self._watcher.start()
@@ -189,6 +188,10 @@ class HermesSync:
             sync_pairs.append((hermes_home / "memories", repo_path / "memories"))
         if self.config.sync_cron:
             sync_pairs.append((hermes_home / "cron", repo_path / "cron"))
+        if self.config.sync_config:
+            sync_pairs.append((hermes_home, repo_path / "config"))
+        if self.config.sync_profiles:
+            sync_pairs.append((hermes_home / "profiles", repo_path / "profiles"))
 
         # Collect files to copy and check for sensitive files
         files_to_copy: list[tuple[Path, Path]] = []
@@ -241,6 +244,10 @@ class HermesSync:
             apply_pairs.append((repo_path / "memories", hermes_home / "memories"))
         if self.config.sync_cron:
             apply_pairs.append((repo_path / "cron", hermes_home / "cron"))
+        if self.config.sync_config:
+            apply_pairs.append((repo_path / "config", hermes_home))
+        if self.config.sync_profiles:
+            apply_pairs.append((repo_path / "profiles", hermes_home / "profiles"))
 
         current_platform = detect_platform()
 

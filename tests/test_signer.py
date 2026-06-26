@@ -3,14 +3,14 @@
 import sys
 from pathlib import Path
 
-# Ensure plugin directory is importable
-_PLUGIN_DIR = Path(__file__).resolve().parent.parent / "plugin"
-if str(_PLUGIN_DIR) not in sys.path:
-    sys.path.insert(0, str(_PLUGIN_DIR))
+# Ensure repo root is importable so `hermes_sync` package works
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 
 import pytest
 
-from security.signer import (
+from hermes_sync.security.signer import (
     generate_keypair,
     sign_content,
     verify_signature,
@@ -101,7 +101,7 @@ class TestEd25519Signer:
 
     def test_ensure_keypair_creates_and_reloads(self, monkeypatch, tmp_path):
         """ensure_keypair creates keypair, then reloads same keys."""
-        import security.signer as signer_mod
+        import hermes_sync.security.signer as signer_mod
         monkeypatch.setattr(signer_mod, "KEYPAIR_DIR", tmp_path)
 
         priv1, pub1 = ensure_keypair()
@@ -113,7 +113,7 @@ class TestEd25519Signer:
         assert pub1 == pub2
 
     def test_load_keypair_returns_none_when_missing(self, monkeypatch, tmp_path):
-        import security.signer as signer_mod
+        import hermes_sync.security.signer as signer_mod
         monkeypatch.setattr(signer_mod, "KEYPAIR_DIR", tmp_path / "nonexistent")
         assert load_keypair() is None
 
@@ -131,27 +131,27 @@ class TestSensitiveFiles:
     """Test .gitignore enforcement for blocked file patterns."""
 
     def test_blocks_env_file(self):
-        from security.patterns import check_sensitive_files
+        from hermes_sync.security.patterns import check_sensitive_files
         blocked = check_sensitive_files(["/path/.env"])
         assert blocked == ["/path/.env"]
 
     def test_blocks_auth_json(self):
-        from security.patterns import check_sensitive_files
+        from hermes_sync.security.patterns import check_sensitive_files
         blocked = check_sensitive_files(["/home/user/.hermes/auth.json"])
         assert len(blocked) == 1
 
     def test_blocks_pem_key(self):
-        from security.patterns import check_sensitive_files
+        from hermes_sync.security.patterns import check_sensitive_files
         blocked = check_sensitive_files(["my-cert.pem"])
         assert len(blocked) == 1
 
     def test_blocks_ssh_dir(self):
-        from security.patterns import check_sensitive_files
+        from hermes_sync.security.patterns import check_sensitive_files
         blocked = check_sensitive_files(["~/.ssh/id_rsa"])
         assert len(blocked) >= 1
 
     def test_allows_normal_files(self):
-        from security.patterns import check_sensitive_files
+        from hermes_sync.security.patterns import check_sensitive_files
         blocked = check_sensitive_files([
             "skills/devops/docker.md",
             "memories/USER.md",
@@ -160,12 +160,12 @@ class TestSensitiveFiles:
         assert blocked == []
 
     def test_blocks_plugin_config(self):
-        from security.patterns import check_sensitive_files
+        from hermes_sync.security.patterns import check_sensitive_files
         blocked = check_sensitive_files(["config.yaml"])
         assert len(blocked) == 1
 
     def test_blocks_mixed_batch(self):
-        from security.patterns import check_sensitive_files
+        from hermes_sync.security.patterns import check_sensitive_files
         blocked = check_sensitive_files([
             "skills/devops/normal.md",
             ".env",

@@ -1,18 +1,7 @@
 # Hermes Sync
 
-<p align="center">
-  <b>Keep your Hermes together.</b><br>
-  Skills. Memory. Cron. Synced across every device you run Hermes on.<br>
-  <i>Two minutes to set up. Zero servers. Just GitHub.</i>
-</p>
-
----
-
-You know that thing where your agent learns something useful on your
-laptop, but your server has no idea? Or you install a skill on one
-machine and have to remember to copy it to the other three?
-
-This fixes that.
+Keep your Hermes together. Skills. Memory. Config. Profiles. Synced
+across every device you run Hermes on. Zero servers. Just GitHub.
 
 ---
 
@@ -20,156 +9,189 @@ This fixes that.
 
 - **Syncs skills** — install a skill once, it's everywhere
 - **Syncs memory** — your agent remembers who you are, on every device
-- **Syncs cron jobs** — optional, off by default (enabling is one line)
-- **Platform-aware** — a macOS-only skill never lands on your Linux server
-- **Security-first** — every file scanned for secrets, suspicious
-  commands, and prompt injections before it leaves your machine
+- **Syncs config** — config.yaml stays in sync (encrypted secrets)
+- **Syncs profiles** — all your profiles, available on every machine
+- **Syncs cron jobs** — optional, off by default
+- **Platform-aware** — macOS-only skill never lands on your Linux server
+- **Security-first** — every file scanned for secrets, Ed25519-signed
+  commits, age-encrypted secrets channel
 - **Offline-safe** — works fine without internet, catches up when you
   reconnect
-- **Zero new infrastructure** — uses a private GitHub repo you already
-  have. No OAuth app, no central service, no tokens to buy.
+- **Zero new infrastructure** — uses a private GitHub repo. No OAuth
+  app, no central service, no tokens to buy.
 
 ---
 
 ## Quick start
 
+### Install
+
 ```bash
-# 1. Install
-git clone https://github.com/Nikko-Thorne/hermes-sync \
-  ~/.hermes/plugins/hermes-sync/
+pip install hermes-sync
+# OR: pip install git+https://github.com/Nikko-Thorne/hermes-sync.git
+```
 
-# 2. Create a private GitHub repo for sync state
-#    Go to https://github.com/new — call it "hermes-sync-state"
-#    Empty, no README.
+### Setup
 
-# 3. Configure
-cat > ~/.hermes/plugins/hermes-sync/config.yaml << EOF
+```bash
+hermes-sync setup
+```
+
+This walks you through:
+1. GitHub repo URL (create a private one first)
+2. GitHub token
+3. What to sync (skills, memories, config, profiles, cron)
+
+### Start syncing
+
+```bash
+hermes-sync start
+```
+
+Runs in foreground. On systemd: `systemctl --user enable --now hermes-sync`.
+
+### Check status
+
+```bash
+hermes-sync status
+```
+
+---
+
+## CLI Reference
+
+```
+hermes-sync start       Start sync daemon (foreground)
+hermes-sync status      Show sync status and config
+hermes-sync push        Manual push
+hermes-sync pull        Manual pull
+hermes-sync setup       Interactive config wizard
+```
+
+---
+
+## Configuration
+
+```yaml
+# ~/.hermes/sync/config.yaml
+
 backend: github
 repo_url: https://github.com/YOU/hermes-sync-state.git
 sync_interval: 60
 sync_skills: true
 sync_memories: true
 sync_cron: false
-EOF
-
-# 4. Set your GitHub token
-export GH_TOKEN=ghp_your_token_here
-
-# 5. Restart Hermes
-#    Plugin auto-detected — starts syncing immediately.
+sync_config: false       # Sync config.yaml (encrypted with age)
+sync_profiles: false     # Sync ~/.hermes/profiles/
+auto_resolve_conflicts: true
+platforms: [linux]       # Auto-detected if empty
 ```
+
+Authentication: `GH_TOKEN` or `GITHUB_TOKEN` env var, or `token:` in config.
+
+---
+
+## Secrets encryption
+
+When `sync_config: true`, sensitive files (`.env`, `auth.json`,
+`config.yaml`) are encrypted with [age](https://age-encryption.org)
+before syncing. Each device gets its own age keypair at
+`~/.hermes/sync/age.key`.
+
+```bash
+# Install age
+# macOS:   brew install age
+# Linux:   apt install age
+# Windows: choco install age
+
+# Keypair is auto-generated on first run.
+# Share the public key between your devices:
+hermes-sync age-pubkey   # prints your public key
+
+# On another device, add the first device's key:
+age-keygen -o ~/.hermes/sync/age.key
+```
+
+Encrypted files in the sync repo look like:
+```
+secrets/
+  env.age
+  auth.age
+  config.age
+```
+
+---
+
+## Architecture
+
+```
+Device A                          GitHub                          Device B
+─────────                         ──────                          ─────────
+~/.hermes/skills/   ──┐
+~/.hermes/memories/ ──┤                                       ┌── ~/.hermes/skills/
+~/.hermes/config.yaml ─┤  push ──►  hermes-sync-state  ◄── pull ─┤ ~/.hermes/memories/
+~/.hermes/profiles/  ──┤           (private repo)              └── ~/.hermes/config.yaml
+~/.hermes/.env ──► encrypt ──► secrets/env.age ◄── decrypt ◄── ~/.hermes/.env
+```
+
+- **Startup pull** — latest files available immediately
+- **Every 60 seconds** — periodic pull check
+- **File watcher** — local changes pushed within seconds (inotify on
+  Linux, polling elsewhere)
+- **Ed25519 signed commits** — every push cryptographically signed
+- **age encrypted secrets** — `.env` and `auth.json` never in plaintext
+  on the remote
 
 ---
 
 ## What gets synced
 
-```
-~/.hermes/skills/     ←→  sync-repo/skills/     ←→  ~/.hermes/skills/
-~/.hermes/memories/   ←→  sync-repo/memories/   ←→  ~/.hermes/memories/
-~/.hermes/cron/       ←→  sync-repo/cron/       ←→  ~/.hermes/cron/
-      Device A               GitHub                    Device B
-```
-
-- **Startup pull** — latest files from other devices available
-  immediately
-- **Every 60 seconds** — checks for new changes from other devices
-- **File watcher** — local changes detected and pushed within seconds
-  (inotify on Linux, polling elsewhere)
-- **Ed25519 signed commits** — every push is cryptographically signed,
-  verifiable authorship without GPG
+| Category | Toggle | Location |
+|----------|--------|----------|
+| Skills | `sync_skills` | `~/.hermes/skills/` |
+| Memory | `sync_memories` | `~/.hermes/memories/` |
+| Cron | `sync_cron` | `~/.hermes/cron/` |
+| Config | `sync_config` | `~/.hermes/config.yaml` (encrypted) |
+| Profiles | `sync_profiles` | `~/.hermes/profiles/` |
 
 ---
 
 ## Security
 
-Every file is scanned before it leaves your machine.
-
-| Layer | Catches |
-|-------|---------|
+| Layer | What it catches |
+|-------|----------------|
 | Secret scanning | API keys, tokens, JWTs, private keys |
 | Command auditing | `curl \| bash`, `rm -rf /`, `chmod 777` |
-| Injection detection | Prompt injection patterns, role-reversal attacks |
-| File blocking | `.env`, `auth.json`, `.pem`, `.key` — never committed |
-
-If a scan fails, the sync aborts — nothing sketchy leaves your machine.
-
----
-
-## Configuration reference
-
-```yaml
-# ~/.hermes/plugins/hermes-sync/config.yaml
-
-backend: github                    # Only backend right now
-repo_url: ""                       # Your private sync repo URL (required)
-sync_interval: 60                  # Seconds between pull checks
-sync_skills: true                  # Sync ~/.hermes/skills/
-sync_memories: true                # Sync ~/.hermes/memories/
-sync_cron: false                   # Sync ~/.hermes/cron/
-auto_resolve_conflicts: true       # Auto-resolve merge conflicts
-platforms: []                      # Auto-detected — override if needed
-```
-
-Authentication: `GH_TOKEN` or `GITHUB_TOKEN` env var, or `token:` in
-config. Token resolution order: env var → config.yaml → `gh auth token`
-→ `git credential fill`.
-
----
-
-## Verify it's working
-
-```bash
-# Plugin status
-hermes plugins list | grep sync
-
-# Should show: hermes-sync | enabled | 0.1.0
-
-# Check the sync repo
-ls ~/.hermes/sync-repo/
-# Should show: skills/ memories/ .git/
-```
-
----
-
-## Troubleshooting
-
-**"not enabled"**
-```bash
-hermes config set plugins.enabled '[hermes-sync]'
-# Then restart Hermes.
-```
-
-**Clone failed**
-```bash
-# Your token might be wrong. Test it:
-GH_TOKEN=your_token git clone https://github.com/YOU/hermes-sync-state.git /tmp/test-clone
-```
-
-**Nothing syncing?**
-```bash
-# Force a manual sync to see what's happening:
-cd ~/.hermes/plugins/hermes-sync
-python3 -c "
-import sys; sys.path.insert(0, '.')
-from sync import HermesSync
-s = HermesSync()
-s.start()
-p, pm, push, pushm = s.sync_now()
-print(f'Pull: {pm}\nPush: {pushm}')
-s.stop()
-"
-```
+| Injection detection | Prompt injection patterns |
+| File blocking | `.env`, `auth.json`, `.pem`, `.key` |
+| Ed25519 signing | Every commit verifiable |
+| age encryption | Secrets encrypted at rest on remote |
 
 ---
 
 ## Running tests
 
 ```bash
-cd ~/.hermes/plugins/hermes-sync
-python3 -m pytest tests/ -v
+cd hermes-sync
+pip install -e ".[dev]"
+pytest tests/ -v
 ```
 
-90 tests. All green.
+---
+
+## From plugin to standalone
+
+Hermes Sync was originally a Hermes plugin. It's now a standalone library
++ CLI that can be integrated into Hermes core or used independently.
+
+Key changes from v0.1.0:
+- Removed plugin architecture (no more `plugin.yaml`, hooks)
+- Package renamed to `hermes_sync` (importable Python package)
+- Added `hermes-sync` CLI command
+- Added config and profiles sync categories
+- Added age-based secrets encryption
+- Fixed Windows compatibility (inotify guard)
+- Fixed test imports and structure
 
 ---
 

@@ -1,7 +1,7 @@
 """Hermes Sync configuration management.
 
-Reads config from ~/.hermes/plugins/hermes-sync/config.yaml with
-sensible defaults. Falls back to environment variables where appropriate.
+Reads config from ~/.hermes/sync/config.yaml with sensible defaults.
+Falls back to environment variables where appropriate.
 """
 
 from __future__ import annotations
@@ -17,42 +17,33 @@ try:
 except ImportError:
     yaml = None
 
-try:
-    from hermes_constants import get_hermes_home
-except ImportError:
-    def get_hermes_home() -> Path:
-        return Path(os.path.expanduser("~/.hermes"))
-
-
-DEFAULT_CONFIG = {
-    "backend": "github",
-    "repo_url": "",
-    "sync_interval": 60,
-    "auto_resolve_conflicts": True,
-    "platforms": [],
-}
+DEFAULT_CONFIG_PATH = Path(os.path.expanduser("~/.hermes/sync/config.yaml"))
 
 
 @dataclass
 class SyncConfig:
-    """Parsed configuration for the Hermes Sync plugin."""
+    """Parsed configuration for Hermes Sync."""
 
     backend: str = "github"
     repo_url: str = ""
     sync_interval: int = 60
     auto_resolve_conflicts: bool = True
     platforms: List[str] = field(default_factory=list)
+
+    # Sync categories
     sync_skills: bool = True
     sync_memories: bool = True
     sync_cron: bool = False
+    sync_config: bool = False
+    sync_profiles: bool = False
 
     @property
     def repo_path(self) -> Path:
-        return get_hermes_home() / "sync-repo"
+        return Path(os.path.expanduser("~/.hermes/sync/repo"))
 
     @property
     def config_path(self) -> Path:
-        return get_hermes_home() / "plugins" / "hermes-sync" / "config.yaml"
+        return DEFAULT_CONFIG_PATH
 
     @property
     def enabled(self) -> bool:
@@ -70,23 +61,22 @@ def detect_platform() -> str:
     return system
 
 
-def load_config() -> SyncConfig:
+def load_config(config_path: Optional[Path] = None) -> SyncConfig:
     cfg = SyncConfig()
 
-    config_path = cfg.config_path
-    if config_path.exists() and yaml is not None:
+    path = config_path or DEFAULT_CONFIG_PATH
+    if path.exists() and yaml is not None:
         try:
-            with open(config_path, encoding="utf-8-sig") as f:
-                raw = yaml.safe_load(f) or {}
+            raw = yaml.safe_load(path.read_text(encoding="utf-8-sig")) or {}
             cfg.backend = raw.get("backend", "github")
             cfg.repo_url = raw.get("repo_url", raw.get("repo", ""))
             cfg.sync_interval = int(raw.get("sync_interval", 60))
-            cfg.auto_resolve_conflicts = bool(
-                raw.get("auto_resolve_conflicts", True)
-            )
+            cfg.auto_resolve_conflicts = bool(raw.get("auto_resolve_conflicts", True))
             cfg.sync_skills = bool(raw.get("sync_skills", True))
             cfg.sync_memories = bool(raw.get("sync_memories", True))
             cfg.sync_cron = bool(raw.get("sync_cron", False))
+            cfg.sync_config = bool(raw.get("sync_config", False))
+            cfg.sync_profiles = bool(raw.get("sync_profiles", False))
             configured_platforms = raw.get("platforms", [])
             if configured_platforms:
                 cfg.platforms = configured_platforms
@@ -108,11 +98,9 @@ def get_token() -> Optional[str]:
     if token:
         return token
 
-    config_path = get_hermes_home() / "plugins" / "hermes-sync" / "config.yaml"
-    if config_path.exists() and yaml is not None:
+    if DEFAULT_CONFIG_PATH.exists() and yaml is not None:
         try:
-            with open(config_path, encoding="utf-8-sig") as f:
-                raw = yaml.safe_load(f) or {}
+            raw = yaml.safe_load(DEFAULT_CONFIG_PATH.read_text(encoding="utf-8-sig")) or {}
             return raw.get("token") or raw.get("github_token")
         except Exception:
             pass

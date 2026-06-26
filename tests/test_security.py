@@ -3,14 +3,14 @@
 import sys
 from pathlib import Path
 
-# Ensure plugin directory is importable
-_PLUGIN_DIR = Path(__file__).resolve().parent.parent / "plugin"
-if str(_PLUGIN_DIR) not in sys.path:
-    sys.path.insert(0, str(_PLUGIN_DIR))
+# Ensure repo root is importable so `hermes_sync` package works
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 
 import pytest
 
-from security.patterns import (
+from hermes_sync.security.patterns import (
     scan_content,
     scan_secrets,
     scan_injections,

@@ -1,7 +1,7 @@
 """Hermes Sync security module.
 
-Provides security scanning, secret redaction, and content signing
-for skills before they leave the local machine.
+Provides security scanning, secret redaction, content signing,
+and age-based encryption for skills before they leave the local machine.
 """
 
 from .patterns import (
@@ -29,6 +29,17 @@ from .signer import (
     verify_commit_message,
 )
 
+from .encryption import (
+    ensure_age_keypair,
+    encrypt_file,
+    decrypt_file,
+    encrypt_secrets_for_push,
+    decrypt_secrets_after_pull,
+    is_age_available,
+    AGE_KEY_PATH,
+    ENCRYPTED_FILE_MAP,
+)
+
 __all__ = [
     # Patterns
     "scan_content",
@@ -51,4 +62,13 @@ __all__ = [
     "ensure_keypair",
     "sign_commit_message",
     "verify_commit_message",
+    # Encryption
+    "ensure_age_keypair",
+    "encrypt_file",
+    "decrypt_file",
+    "encrypt_secrets_for_push",
+    "decrypt_secrets_after_pull",
+    "is_age_available",
+    "AGE_KEY_PATH",
+    "ENCRYPTED_FILE_MAP",
 ]

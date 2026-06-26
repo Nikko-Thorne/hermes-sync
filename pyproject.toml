@@ -1,0 +1,35 @@
+[project]
+name = "hermes-sync"
+version = "0.2.0"
+description = "Cross-device sync for Hermes Agent — sync skills, memory, config, and profiles via GitHub. Zero infrastructure."
+readme = "README.md"
+license = { text = "MIT" }
+authors = [
+    { name = "Nikko Thorne", email = "nikkko.thorne@gmail.com" },
+]
+requires-python = ">=3.11"
+dependencies = [
+    "pynacl>=1.5",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-xdist>=3.0",
+]
+
+[project.scripts]
+hermes-sync = "hermes_sync.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["hermes_sync*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-n 0 -v"

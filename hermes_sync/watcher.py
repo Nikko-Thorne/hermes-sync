@@ -66,14 +66,14 @@ try:
 except (OSError, AttributeError):
     pass
 
-# Events we care about for triggering sync
-WATCH_MASK = (
-    IN_CLOSE_WRITE | IN_CREATE | IN_DELETE
-    | IN_MOVED_TO | IN_MOVED_FROM
-)
-
-EVENT_STRUCT_FORMAT = "iIII"
-EVENT_STRUCT_SIZE = struct.calcsize(EVENT_STRUCT_FORMAT)
+# Events we care about for triggering sync (only meaningful when INOTIFY_AVAILABLE)
+if INOTIFY_AVAILABLE:
+    WATCH_MASK = (
+        IN_CLOSE_WRITE | IN_CREATE | IN_DELETE
+        | IN_MOVED_TO | IN_MOVED_FROM
+    )
+    EVENT_STRUCT_FORMAT = "iIII"
+    EVENT_STRUCT_SIZE = struct.calcsize(EVENT_STRUCT_FORMAT)
 
 DEBOUNCE_SECONDS = 2.0  # Wait after last change before triggering sync
 

@@ -6,16 +6,16 @@ import tempfile
 import subprocess
 from pathlib import Path
 
-# Ensure plugin directory is importable
-_PLUGIN_DIR = Path(__file__).resolve().parent.parent / "plugin"
-if str(_PLUGIN_DIR) not in sys.path:
-    sys.path.insert(0, str(_PLUGIN_DIR))
+# Ensure repo root is importable so `hermes_sync` package works
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 
 import pytest
 
-from backends.github import GitBackend
-from config import SyncConfig
-from sync import HermesSync
+from hermes_sync.backends.github import GitBackend
+from hermes_sync.config import SyncConfig
+from hermes_sync.sync import HermesSync
 
 
 def _git(cmd: list, cwd: str, check: bool = True) -> subprocess.CompletedProcess:

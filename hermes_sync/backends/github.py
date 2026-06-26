@@ -182,7 +182,7 @@ class GitBackend:
             return True, "No changes to push"
 
         # Pre-commit gate: check for sensitive files
-        from security import check_sensitive_files
+        from hermes_sync.security import check_sensitive_files
         changed_paths = []
         for line in stdout.strip().split("\n"):
             if line.strip():
